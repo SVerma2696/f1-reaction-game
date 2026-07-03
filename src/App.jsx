@@ -13,36 +13,18 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, increment, query } f
 /**
  * Environment-driven Firebase configuration.
  * 
- * IMPORTANT ARCHITECTURAL NOTE FOR VITE DEPLOYMENT: 
- * The active configuration block below utilizes `process.env` to ensure successful compilation 
- * within strict ES2015 preview environments. 
- * 
- * When deploying this project locally via Vite, you MUST swap the active block with the 
- * commented-out Vite-specific configuration block directly underneath it, which utilizes 
- * Vite's required `import.meta.env` syntax.
+ * By embedding these public Firebase identifiers here, we bypass Vite's strict 
+ * environment variable requirements during the GitHub Pages build process. 
+ * Note: Firebase Web API keys are completely safe to expose in client-side bundles.
  */
-
-// --- ACTIVE CONFIGURATION (Preview/Fallback) ---
 const firebaseConfig = {
-  apiKey: typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_API_KEY || '' : '',
-  authDomain: typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_AUTH_DOMAIN || '' : '',
-  projectId: typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_PROJECT_ID || '' : '',
-  storageBucket: typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_STORAGE_BUCKET || '' : '',
-  messagingSenderId: typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '' : '',
-  appId: typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_APP_ID || '' : ''
+  apiKey: 'AIzaSyD7Tzz8QBIFR0uqxFtGyg26cuT4OPZrA2M',
+  authDomain: 'f1-timer-2696.firebaseapp.com',
+  projectId: 'f1-timer-2696',
+  storageBucket: 'f1-timer-2696.firebasestorage.app',
+  messagingSenderId: '238647758780',
+  appId: '1:238647758780:web:4a949bffb393400d1de5b9'
 };
-
-// --- VITE LOCAL BUILD CONFIGURATION (Uncomment for Vite production) ---
-/*
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
-};
-*/
 
 /**
  * Initializes the Firebase application instance securely.
