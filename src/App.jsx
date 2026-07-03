@@ -10,18 +10,16 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, increment, query } f
 // 1. UTILITIES & CONFIGURATION
 // ==========================================
 
-
 /**
  * Environment-driven Firebase configuration.
  * 
  * IMPORTANT ARCHITECTURAL NOTE FOR VITE DEPLOYMENT: 
  * The active configuration block below utilizes `process.env` to ensure successful compilation 
- * within strict ES2015 preview environments (which do not support import.meta). 
+ * within strict ES2015 preview environments. 
  * 
  * When deploying this project locally via Vite, you MUST swap the active block with the 
  * commented-out Vite-specific configuration block directly underneath it, which utilizes 
- * Vite's required `import.meta.env` syntax. This ensures your local React compiler can 
- * properly map your .env variables to the client bundle without triggering ReferenceErrors.
+ * Vite's required `import.meta.env` syntax.
  */
 
 // --- ACTIVE CONFIGURATION (Preview/Fallback) ---
@@ -146,6 +144,7 @@ const ACHIEVEMENT_DEFS = [
 
 /**
  * Evaluates the user's reaction time and assigns a gamified, image-based rank.
+ * Time bounds are strictly evaluated for an O(1) complexity classification.
  * 
  * @param {number|null} time - The reaction time in seconds.
  * @returns {Object} Metadata containing rank name, associated visual asset, and color profiles.
@@ -187,7 +186,7 @@ const calculateStdDev = (arr) => {
 };
 
 /**
- * Contextual AI Coaching logic for Practice Mode.
+ * Contextual Coaching logic for Practice Mode.
  * Evaluates the user's immediate speed and rolling standard deviation to offer actionable advice.
  * 
  * @param {number} reactionTime - The most recent run.
@@ -841,7 +840,8 @@ export default function App() {
     if (!db) { setIsOfflineMode(true); setAllScores(fallbackScores); return; }
     
     try {
-      const leaderRef = collection(db, 'artifacts', appId, 'public', 'data', 'f1_leaderboard');
+      // Configured to use a standard valid document collection path
+      const leaderRef = collection(db, 'f1_leaderboard');
       const q = query(leaderRef);
       
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -876,7 +876,7 @@ export default function App() {
   const saveScoreToLeaderboard = useCallback(async (time, currentName = username, isNewBest = false) => {
     if (!user || isPracticeMode || !db) return;
     try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'f1_leaderboard', user.uid);
+      const docRef = doc(db, 'f1_leaderboard', user.uid);
       const updateData = { userId: user.uid, username: currentName, updatedAt: Date.now(), attempts: increment(1) };
       if (isNewBest && time !== null) updateData.bestTime = time;
       await setDoc(docRef, updateData, { merge: true });
@@ -1227,7 +1227,7 @@ export default function App() {
             <Award className="w-5 h-5" />
           </button>
           
-          <a href="https://github.com/SVerma2696/f1-timer" target="_blank" rel="noopener noreferrer" className={`p-2.5 sm:p-2 rounded-full transition-colors hidden sm:block ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-200'}`} title="GitHub Repo">
+          <a href="https://github.com/SVerma2696/f1-reaction-game" target="_blank" rel="noopener noreferrer" className={`p-2.5 sm:p-2 rounded-full transition-colors hidden sm:block ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-200'}`} title="GitHub Repo">
             <GithubIcon className="w-5 h-5" />
           </a>
           
