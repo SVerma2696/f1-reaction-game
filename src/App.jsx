@@ -5,7 +5,6 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInAnonymously, setPersistence, browserLocalPersistence, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, increment, query } from 'firebase/firestore';
 
-
 // ==========================================
 // 1. UTILITIES & CONFIGURATION
 // ==========================================
@@ -34,14 +33,13 @@ const firebaseConfig = {
  * @returns {Object} Containing the app, db, and auth Firebase instances.
  */
 const initFirebase = () => {
-  if (typeof __firebase_config === 'undefined' && !firebaseConfig.apiKey) {
+  if (!firebaseConfig.apiKey) {
     console.warn("Firebase configuration missing. Running gracefully in offline mode.");
     return { app: null, db: null, auth: null };
   }
   
   try {
-    const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
-    const initializedApp = !getApps().length ? initializeApp(config) : getApp();
+    const initializedApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     return { 
       app: initializedApp, 
       db: getFirestore(initializedApp), 
@@ -122,7 +120,6 @@ const ACHIEVEMENT_DEFS = [
   { id: 'consistency_20', icon: '⏱️', name: 'Metronome', desc: 'Hold a deviation under 20ms for 10 races.' },
   { id: 'session_20', icon: '🧘', name: 'In the Zone', desc: 'Complete 20 races in a single active session.' },
 ];
-
 
 /**
  * Evaluates the user's reaction time and assigns a gamified, image-based rank.
@@ -223,11 +220,9 @@ const playBeep = (type = 'light') => {
   osc.start(); osc.stop(audioCtx.currentTime + 0.1);
 };
 
-
 // ==========================================
 // 2. STATE MACHINE
 // ==========================================
-
 
 /**
  * The initialization payload for the primary game loop reducer.
@@ -272,10 +267,10 @@ function gameReducer(state, action) {
   }
 }
 
-
 // ==========================================
 // 3. SUB-COMPONENTS
 // ==========================================
+
 
 /** 
  * Static SVG Icon wrapper for GitHub linking. 
@@ -297,7 +292,6 @@ const F1CarIcon = ({ className, color = "currentColor" }) => (
     <circle cx="78" cy="28" r="9" />
   </svg>
 );
-
 
 /**
  * Dropdown Menu Component for selecting application display themes.
@@ -376,7 +370,6 @@ const Gantry = React.memo(({ litCount, isDark }) => {
     </div>
   );
 });
-
 
 /**
  * Analytical Dashboard Component.
@@ -532,7 +525,6 @@ const AchievementsModal = React.memo(({ isOpen, onClose, isDark, achievements })
   );
 });
 
-
 /**
  * Global Real-Time Leaderboard Interface.
  * Maps out the live Firestore query response to display competitive standings.
@@ -587,7 +579,7 @@ const LeaderboardModal = React.memo(({ isOpen, onClose, user, currentUsername, o
             <div className={`flex flex-col gap-3 p-4 rounded-xl mb-4 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">Your Rank</span>
-                <span className="font-bold text-red-500">#{userRank > 0 ? userRank : '-'} <span className="text-gray-500 text-sm font-normal">of {allScores.length}</span></span>
+                <span className="font-bold text-red-500">#{userRank > 0 ? userRank : '-'} <span className="text-gray-500 text-sm font-normal">of {allScores.filter(s => s.bestTime > 0).length}</span></span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 {isEditing ? (
@@ -684,7 +676,6 @@ const AboutModal = ({ isOpen, onClose, isDark }) => {
     </div>
   );
 };
-
 
 // ==========================================
 // 4. MAIN APPLICATION (App.jsx)
@@ -851,19 +842,38 @@ export default function App() {
 
   const clearAllTimeouts = useCallback(() => { timeoutsRef.current.forEach(clearTimeout); timeoutsRef.current = []; }, []);
 
+
   /**
    * Data Layer Transport Hook
    * Pushes personal records up to the Firestore NoSQL database if an internet connection exists.
+   * Modifying 'pbToSave' ensures we always capture the absolute best time locally cached,
+   * fixing an edge-case bug where users with local history would fail to propagate upwards.
    */
-  const saveScoreToLeaderboard = useCallback(async (time, currentName = username, isNewBest = false) => {
+  const saveScoreToLeaderboard = useCallback(async (pbToSave, currentName = username, isAttempt = true) => {
     if (!user || isPracticeMode || !db) return;
     try {
       const docRef = doc(db, 'f1_leaderboard', user.uid);
-      const updateData = { userId: user.uid, username: currentName, updatedAt: Date.now(), attempts: increment(1) };
-      if (isNewBest && time !== null) updateData.bestTime = time;
+      const updateData = { 
+        userId: user.uid, 
+        username: currentName, 
+        updatedAt: Date.now()
+      };
+      
+      // We explicitly isolate attempts logic so that simple name changes don't accidentally penalize the user
+      if (isAttempt) {
+        updateData.attempts = increment(1);
+      }
+      
+      // If we have ANY best time (historical or brand new), guarantee its sync to Firestore.
+      if (pbToSave !== null) {
+        updateData.bestTime = pbToSave;
+      }
+      
       await setDoc(docRef, updateData, { merge: true });
-    } catch (err) { setIsOfflineMode(true); } 
-  }, [user, username, isPracticeMode]);
+    } catch (err) { 
+      setIsOfflineMode(true); 
+    } 
+  }, [user, username, isPracticeMode, db]);
 
 
   /**
@@ -1006,7 +1016,9 @@ export default function App() {
         const newFS = falseStarts + 1;
         setFalseStarts(newFS);
         try { localStorage.setItem('f1_false_starts', newFS.toString()); } catch {}
-        saveScoreToLeaderboard(null, username, false); 
+        
+        // Pass current known bestTime during a jump start, maintaining server synchronization.
+        saveScoreToLeaderboard(bestTime, username, true); 
         
         evaluateAchievements({ isJumpStart: true, isPractice: false, totalFails: newFS, sessionRacesCount: nextSessionCount });
       }
@@ -1041,13 +1053,17 @@ export default function App() {
       }
 
       const isNewBest = bestTime === null || timeInSeconds < bestTime;
+      let currentPB = bestTime;
+      
       if (isNewBest && !isPracticeMode) {
+        currentPB = timeInSeconds;
         setBestTime(timeInSeconds);
         try { localStorage.setItem('f1_pb', timeInSeconds.toString()); } catch {} 
         setShowConfetti(true); 
       }
       
-      saveScoreToLeaderboard(timeInSeconds, username, isNewBest);
+      // Ensure the absolute best time is transmitted on valid run completions
+      saveScoreToLeaderboard(currentPB, username, true);
     }
   }, [startSequence, clearAllTimeouts, bestTime, username, saveScoreToLeaderboard, isPracticeMode, fullHistory, falseStarts, evaluateAchievements, sessionRaces, history]);
 
@@ -1102,6 +1118,7 @@ export default function App() {
       showNotification("Result copied to clipboard!");
     }
   };
+
 
   if (!authReady) {
     return (
@@ -1352,7 +1369,7 @@ export default function App() {
 
       {/* --- MOUNTED OVERLAYS & MODALS --- */}
       <Confetti active={showConfetti} />
-      <LeaderboardModal isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} user={user} currentUsername={username} onUpdateUsername={(name) => { setUsername(name); if (bestTime !== null) saveScoreToLeaderboard(bestTime, name, true); }} isDark={isDark} allScores={allScores} />
+      <LeaderboardModal isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} user={user} currentUsername={username} onUpdateUsername={(name) => { setUsername(name); if (bestTime !== null) saveScoreToLeaderboard(bestTime, name, false); }} isDark={isDark} allScores={allScores} />
       <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} isDark={isDark} />
       <DashboardModal isOpen={showStats} onClose={() => setShowStats(false)} isDark={isDark} fullHistory={fullHistory} falseStarts={falseStarts} />
       <AchievementsModal isOpen={showAchievements} onClose={() => setShowAchievements(false)} isDark={isDark} achievements={achievements} />
